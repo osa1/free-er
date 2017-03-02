@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE EmptyCase             #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -47,33 +49,28 @@ decomp (UNext u) = Left u
 
 data Nat = Z | S Nat
 
--- | A proxy specialized to types of kind `Nat`.
-data P (n :: Nat) = P
-
 -- | Injecting/projecting at a specified position `n`.
-class Member' t r (n :: Nat) where
-  inj' :: P n -> t v -> Union r v
-  prj' :: P n -> Union r v -> Maybe (t v)
+class Member' (n :: Nat) (f :: * -> *) r where
+  inj' :: f v -> Union r v
+  prj' :: Union r v -> Maybe (f v)
 
-instance (r ~ (t ': r')) => Member' t r 'Z where
-  inj' _ = UNow
-  prj' _ (UNow x) = Just x
-  prj' _ _        = Nothing
+instance (r ~ (t ': r')) => Member' 'Z t r where
+  inj' = UNow
+  prj' (UNow x) = Just x
+  prj' _        = Nothing
 
-instance Member' t r' n => Member' t (t' ': r') ('S n) where
-  inj' _ v = UNext (inj' (P :: P n) v)
-  prj' _ UNow{}    = Nothing
-  prj' _ (UNext u) = prj' (P :: P n) u
+instance Member' n t r' => Member' ('S n) t (t' ': r') where
+  inj' v = UNext (inj' @n v)
+  prj' UNow{}    = Nothing
+  prj' (UNext u) = prj' @n u
 
 ----------------------------------------------------------------------------------------------------
 
-class (Member' t r (FindElem t r)) => Member t r where
+class (Member' (FindElem t r) t r ) => Member t r where
   inj :: t v -> Union r v
-  -- prj :: Union r v -> Maybe (t v)
 
-instance (Member' t r (FindElem t r)) => Member t r where
-  inj = inj' (P :: P (FindElem t r))
-  -- prj = prj' (P :: P (FindElem t r))
+instance (Member' (FindElem t r) t r ) => Member t r where
+  inj = inj' @(FindElem t r)
 
 ----------------------------------------------------------------------------------------------------
 
