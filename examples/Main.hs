@@ -1,8 +1,10 @@
-{-# LANGUAGE DataKinds        #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs            #-}
-{-# LANGUAGE TupleSections    #-}
-{-# LANGUAGE TypeOperators    #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeOperators       #-}
 
 module Main where
 
@@ -10,7 +12,6 @@ module Main where
 import           Control.Exception hiding (catch, throw)
 import           Control.Monad.Eff
 import           Data.IORef
-import           Data.Proxy
 ----------------------------------------------------------------------------------------------------
 
 ----------------------------------------------------------------------------------------------------
@@ -93,11 +94,11 @@ f1 _ = do
     throw (StrError "err")
     throw (IntError 123)
 
-throwIO' :: (Member IO r, Exception e) => Proxy e -> Eff (Throw e ': r) a -> Eff r a
-throwIO' _ (Val a)   = return a
-throwIO' p (Eff u k) =
+throwIO' :: forall e r a . (Member IO r, Exception e) => Eff (Throw e ': r) a -> Eff r a
+throwIO' (Val a)   = return a
+throwIO' (Eff u k) =
     case decomp u of
-      Left  u'        -> Eff u' (singleton (throwIO' p . kApp k))
+      Left  u'        -> Eff u' (singleton (throwIO' . kApp k))
       Right (Throw e) -> send (throwIO e)
 
 run_f1_pure :: Either IntError (Either StrError Int)
@@ -120,10 +121,10 @@ get_f1 =
       f''
 
 f1_ :: (Member (Throw StrError) r, Member IO r) => Eff r Int
-f1_ = throwIO' (Proxy :: Proxy IntError) (f1 10)
+f1_ = throwIO' @IntError (f1 10)
 
 f1__ :: Member IO r => Eff r Int
-f1__ = throwIO' (Proxy :: Proxy StrError) f1_
+f1__ = throwIO' @StrError f1_
 
 run_f1_IO :: IO Int
 run_f1_IO = runM f1__
