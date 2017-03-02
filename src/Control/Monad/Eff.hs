@@ -50,16 +50,16 @@ decomp (UNext u) = Left u
 data Nat = Z | S Nat
 
 -- | Injecting/projecting at a specified position `n`.
-class Member' (n :: Nat) (f :: * -> *) r where
-  inj' :: f v -> Union r v
-  prj' :: Union r v -> Maybe (f v)
+class Member' (n :: Nat) (f :: * -> *) rs where
+  inj' :: f v -> Union rs v
+  prj' :: Union rs v -> Maybe (f v)
 
-instance (r ~ (t ': r')) => Member' 'Z t r where
+instance rs ~ (f ': rs') => Member' 'Z f rs where
   inj' = UNow
   prj' (UNow x) = Just x
   prj' _        = Nothing
 
-instance Member' n t r' => Member' ('S n) t (t' ': r') where
+instance (Member' n f rs', rs ~ (r ': rs'))  => Member' ('S n) f rs where
   inj' v = UNext (inj' @n v)
   prj' UNow{}    = Nothing
   prj' (UNext u) = prj' @n u
