@@ -1,7 +1,12 @@
 name:                free-er
 version:             0.1.0.0
--- synopsis:
--- description:
+
+synopsis:
+  An extensible effects library
+
+description:
+  See examples directory for some example effect definitions and handlers.
+
 homepage:            https://github.com/osa1/free-er
 license:             BSD3
 license-file:        LICENSE
@@ -42,4 +47,4 @@ executable free-er-examples
 
 source-repository head
   type:     git
-  location: https://github.com/githubuser/free-er
+  location: https://github.com/osa1/free-er
