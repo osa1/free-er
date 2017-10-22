@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -10,9 +9,9 @@
 module Main where
 
 ----------------------------------------------------------------------------------------------------
-import           Control.Exception hiding (catch, throw)
-import           Control.Monad.Eff
-import           Data.IORef
+import Control.Exception hiding (catch, throw)
+import Control.Monad.Eff
+import Data.IORef
 ----------------------------------------------------------------------------------------------------
 
 ----------------------------------------------------------------------------------------------------
@@ -154,7 +153,28 @@ data Reader s a where
 ask :: Member (Reader s) r => Eff r s
 ask = send Ask
 
--- TODO: local
+-- This version is not ideal: we pattern match on the effect signature
+local' :: (s -> s) -> Eff (Reader s ': r) s -> Eff (Reader s ': r) s
+local' _ (Val v) = return v
+local' f (Eff u k) = case decomp u of
+    Left u' ->
+      Eff (UNext u') k
+    Right Ask -> do
+      s <- ask
+      local f (kApp k (f s))
+
+local
+    :: forall e a r . Member (Reader e) r
+    => (e -> e)
+    -> Eff r a
+    -> Eff r a
+local f m = do
+  e0 <- ask
+  let e = f e0
+  -- Local signature is needed, as always with GADTs
+  let h :: Reader e v -> (v -> Eff r a) -> Eff r a
+      h Ask g = g e
+  interpose return h m
 
 runReader :: s -> Eff (Reader s ': r) a -> Eff r a
 runReader _ (Val v) = return v
@@ -200,25 +220,57 @@ th1 :: Member (Yield Int ()) r => Eff r ()
 th1 = yieldInt 1 >> yieldInt 2
 
 c1 :: IO ()
-c1 = runM (runTrace (runCoroutine th1 >>= loop))
- where
-   loop (CoroutineContinue x k) = do
-     trace ("Coroutine step: " ++ show (x :: Int))
-     k () >>= loop
-   loop (CoroutineDone ret) =
-     trace ("Done with " ++ show ret)
-
-th2 :: (Member (Yield Int ()) r, Member (Reader Int) r) => Eff r ()
-th2 = ask >>= yieldInt >> (ask >>= yieldInt)
-
-c2 :: IO ()
-c2 = runM (runTrace (runReader (10 :: Int) (runCoroutine th2 >>= loop)))
+c1 =
+    runM (runTrace (runCoroutine th1 >>= loop))
   where
     loop (CoroutineContinue x k) = do
       trace ("Coroutine step: " ++ show (x :: Int))
       k () >>= loop
     loop (CoroutineDone ret) =
       trace ("Done with " ++ show ret)
+
+th2 :: (Member (Yield Int ()) r, Member (Reader Int) r) => Eff r ()
+th2 = ask >>= yieldInt >> (ask >>= yieldInt)
+
+c2 :: IO ()
+c2 =
+    runM (runTrace (runReader (10 :: Int) (runCoroutine th2 >>= loop)))
+  where
+    loop (CoroutineContinue x k) = do
+      trace ("Coroutine step: " ++ show (x :: Int))
+      k () >>= loop
+    loop (CoroutineDone ret) =
+      trace ("Done with " ++ show ret)
+
+c7 :: IO ()
+c7 =
+    runM $
+    runTrace $
+    runReader (1000 :: Double) $
+    runReader (1000 :: Double) $
+    runReader (10 :: Int) $
+    runCoroutine (th client) >>= loop
+  where
+    loop (CoroutineContinue x k) = do
+      trace (show (x::Int))
+      local (\_ -> fromIntegral (x+1) :: Double) (k ()) >>= loop
+
+    loop (CoroutineDone _) =
+      trace "Done"
+
+    -- cl, client, ay are monomorphic bindings
+    client = ay >> ay >> ay
+    ay = do
+      x <- ask
+      y <- ask
+      yieldInt (x + round (y :: Double))
+
+    -- There is no polymorphic recursion here
+    th cl = do
+      _ <- cl
+      v <- ask
+      _ <- (if v > (20::Int) then id else local (+(5::Int))) cl
+      if v > (20::Int) then return () else local (+(10::Int)) (th cl)
 
 ----------------------------------------------------------------------------------------------------
 

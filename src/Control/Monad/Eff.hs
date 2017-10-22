@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -24,6 +25,7 @@ module Control.Monad.Eff
   , send
   , kApp
   , kComp
+  , interpose
   , run
   , runM
 
@@ -69,9 +71,11 @@ instance (Member' n f rs', rs ~ (r ': rs'))  => Member' ('S n) f rs where
 
 class (Member' (FindElem t r) t r ) => Member t r where
   inj :: t v -> Union r v
+  prj :: Union r v -> Maybe (t v)
 
 instance (Member' (FindElem t r) t r ) => Member t r where
   inj = inj' @(FindElem t r)
+  prj = prj' @(FindElem t r)
 
 ----------------------------------------------------------------------------------------------------
 
@@ -123,6 +127,23 @@ kApp k0 a =
 -- | Compose effectful arrows and possibly change the effect.
 kComp :: Arrs r a b -> (Eff r b -> Eff r' c) -> (a -> Eff r' c)
 kComp g h a = h (kApp g a)
+
+interpose
+    :: Member t r
+    => (a -> Eff r w)
+    -> (forall v . t v -> (v -> Eff r w) -> Eff r w)
+    -> Eff r a
+    -> Eff r w
+interpose ret h m =
+    loop m
+  where
+    loop (Val x) = ret x
+    loop (Eff u k) =
+      case prj u of
+        Nothing ->
+          Eff u (singleton (kComp k loop))
+        Just x ->
+          h x (kComp k loop)
 
 -- | Inject an effectful value into an `Eff`.
 send :: Member t r => t v -> Eff r v
