@@ -23,6 +23,7 @@ module Control.Monad.Eff
   , Eff (..)
   , send
   , kApp
+  , kComp
   , run
   , runM
 
@@ -118,6 +119,10 @@ kApp k0 a =
     app :: Eff r x -> Arrs r x b -> Eff r b
     app (Val y)   k  = kApp k y
     app (Eff u k) k' = Eff u (append k k')
+
+-- | Compose effectful arrows and possibly change the effect.
+kComp :: Arrs r a b -> (Eff r b -> Eff r' c) -> (a -> Eff r' c)
+kComp g h a = h (kApp g a)
 
 -- | Inject an effectful value into an `Eff`.
 send :: Member t r => t v -> Eff r v
